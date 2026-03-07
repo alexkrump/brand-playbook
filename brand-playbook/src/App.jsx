@@ -1,35 +1,14 @@
 import { useState, useEffect, useCallback } from "react";
 
 // ============================================================
-// UNLOCK CODE CONFIGURATION
-// ============================================================
-// Set your unlock codes here. These are the codes buyers receive
-// after purchasing on Lemon Squeezy / Gumroad.
-//
-// To change a code: update the string below and redeploy.
-// Codes are case-insensitive when buyers enter them.
-//
-// NOTE: Client-side app — determined users could find these in
-// source. For this price point, honor system + friction is fine.
-// For bulletproof protection later, add a backend.
-// ============================================================
-
-const UNLOCK_CODES = {
-  clarity:  "CLARITY-2025",
-  identity: "IDENTITY-2025",
-  engine:   "ENGINE-2025",
-  bundle:   "FULLBRAND-2025",
-};
-
-// ============================================================
-// PURCHASE LINKS — replace with your Lemon Squeezy URLs
+// PURCHASE LINKS — your Lemon Squeezy checkout URLs
 // ============================================================
 
 const PURCHASE_LINKS = {
-  clarity:  "https://your-store.lemonsqueezy.com/buy/clarity",
-  identity: "https://your-store.lemonsqueezy.com/buy/identity",
-  engine:   "https://your-store.lemonsqueezy.com/buy/engine",
-  bundle:   "https://your-store.lemonsqueezy.com/buy/bundle",
+  clarity:  "https://alexkrump.lemonsqueezy.com/checkout/buy/1cdb8d8f-4826-4fec-a982-9a3fff79ca86",
+  identity: "https://alexkrump.lemonsqueezy.com/checkout/buy/986990ee-22da-4cac-b707-fd4f000205ea",
+  engine:   "https://alexkrump.lemonsqueezy.com/checkout/buy/4efee914-1184-47ac-b5c6-f99607cff881",
+  bundle:   "https://alexkrump.lemonsqueezy.com/checkout/buy/89d72247-d1fa-417c-bd8d-0d01f68d17cb",
 };
 
 // ============================================================
@@ -291,6 +270,17 @@ const phaseConfig = {
   Engine: { color: "#1A4FA8" },
 };
 
+// ============================================================
+// ADMIN TEST CODES — for your own use, bypass API validation
+// Change these to something only you know, then redeploy.
+// ============================================================
+const ADMIN_CODES = {
+  "MFG-CLARITY-ADMIN":  "clarity",
+  "MFG-IDENTITY-ADMIN": "identity",
+  "MFG-ENGINE-ADMIN":   "engine",
+  "MFG-BUNDLE-ADMIN":   "bundle",
+};
+
 const STORAGE_KEY = "brand-playbook-state";
 
 function LockIcon({ size = 14, color = "#AAA" }) {
@@ -314,6 +304,7 @@ export default function BrandPlaybook() {
   const [codeModal, setCodeModal] = useState(null);
   const [codeInput, setCodeInput] = useState("");
   const [codeError, setCodeError] = useState("");
+  const [codeLoading, setCodeLoading] = useState(false);
 
   useEffect(() => {
     try {
@@ -338,21 +329,46 @@ export default function BrandPlaybook() {
     return state.unlocked[key] === true || state.unlocked["bundle"] === true;
   };
 
-  const tryUnlock = () => {
-    const input = codeInput.trim().toUpperCase();
-    if (!input) { setCodeError("Please enter a code."); return; }
-    let matched = null;
-    for (const [key, code] of Object.entries(UNLOCK_CODES)) {
-      if (input === code.toUpperCase()) { matched = key; break; }
-    }
-    if (matched) {
-      const next = { ...state, unlocked: { ...state.unlocked, [matched]: true } };
+  const tryUnlock = async () => {
+    const input = codeInput.trim();
+    if (!input) { setCodeError("Please enter a license key."); return; }
+
+    // Check admin codes first (no API call needed)
+    const adminMatch = ADMIN_CODES[input.toUpperCase()];
+    if (adminMatch) {
+      const next = { ...state, unlocked: { ...state.unlocked, [adminMatch]: true } };
       save(next);
       setCodeModal(null);
       setCodeInput("");
       setCodeError("");
-    } else {
-      setCodeError("Invalid code. Please check and try again.");
+      return;
+    }
+
+    setCodeLoading(true);
+    setCodeError("");
+
+    try {
+      const res = await fetch("/api/validate-key", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ licenseKey: input }),
+      });
+
+      const data = await res.json();
+
+      if (data.success && data.phase) {
+        const next = { ...state, unlocked: { ...state.unlocked, [data.phase]: true } };
+        save(next);
+        setCodeModal(null);
+        setCodeInput("");
+        setCodeError("");
+      } else {
+        setCodeError(data.error || "Invalid license key.");
+      }
+    } catch (err) {
+      setCodeError("Connection error. Please try again.");
+    } finally {
+      setCodeLoading(false);
     }
   };
 
@@ -416,7 +432,7 @@ export default function BrandPlaybook() {
           position: "fixed", inset: 0, zIndex: 1000, background: "rgba(0,0,0,0.4)",
           display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
           backdropFilter: "blur(4px)",
-        }} onClick={() => { setCodeModal(null); setCodeInput(""); setCodeError(""); }}>
+        }} onClick={() => { if (!codeLoading) { setCodeModal(null); setCodeInput(""); setCodeError(""); } }}>
           <div style={{
             background: "#fff", borderRadius: 20, padding: "36px 32px", maxWidth: 420, width: "100%",
             boxShadow: "0 20px 60px rgba(0,0,0,0.15)",
@@ -432,28 +448,29 @@ export default function BrandPlaybook() {
               Unlock {codeModal}
             </h3>
             <p style={{ fontSize: 14, color: "#6B6B7B", marginBottom: 24, lineHeight: 1.6 }}>
-              Enter the unlock code you received after purchase.
+              Enter the license key you received after purchase.
             </p>
             <input
               value={codeInput}
               onChange={e => { setCodeInput(e.target.value); setCodeError(""); }}
-              onKeyDown={e => { if (e.key === "Enter") tryUnlock(); }}
-              placeholder="Enter your unlock code..."
+              onKeyDown={e => { if (e.key === "Enter" && !codeLoading) tryUnlock(); }}
+              placeholder="Paste your license key..."
               autoFocus
+              disabled={codeLoading}
               style={{
                 width: "100%", padding: "12px 16px", fontSize: 15, border: codeError ? "2px solid #E55" : "2px solid #E8E6E1",
-                borderRadius: 12, outline: "none", fontFamily: "inherit", background: "#FAFAF8",
-                boxSizing: "border-box",
+                borderRadius: 12, outline: "none", fontFamily: "inherit", background: codeLoading ? "#F3F3F1" : "#FAFAF8",
+                boxSizing: "border-box", opacity: codeLoading ? 0.6 : 1,
               }}
             />
             {codeError && <div style={{ fontSize: 13, color: "#E55", marginTop: 8, fontWeight: 500 }}>{codeError}</div>}
             <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
-              <button onClick={tryUnlock} style={{
+              <button onClick={tryUnlock} disabled={codeLoading} style={{
                 flex: 1, padding: "12px 20px", fontSize: 14, fontWeight: 600,
-                background: phaseConfig[codeModal]?.color || "#1A8A64", color: "#fff",
-                border: "none", borderRadius: 12, cursor: "pointer",
-              }}>Unlock</button>
-              <button onClick={() => { setCodeModal(null); setCodeInput(""); setCodeError(""); }} style={{
+                background: codeLoading ? "#AAA" : (phaseConfig[codeModal]?.color || "#1A8A64"), color: "#fff",
+                border: "none", borderRadius: 12, cursor: codeLoading ? "default" : "pointer",
+              }}>{codeLoading ? "Verifying..." : "Unlock"}</button>
+              <button onClick={() => { if (!codeLoading) { setCodeModal(null); setCodeInput(""); setCodeError(""); } }} style={{
                 padding: "12px 20px", fontSize: 14, background: "#F3F3F1", color: "#6B6B7B",
                 border: "none", borderRadius: 12, cursor: "pointer",
               }}>Cancel</button>
@@ -496,8 +513,6 @@ export default function BrandPlaybook() {
               </div>
             </div>
           </div>
-
-          {/* Phase bars */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginTop: 24 }}>
             {[
               { phase: "Foundation", chs: ["00"] },
@@ -531,26 +546,17 @@ export default function BrandPlaybook() {
       {/* PRICING BANNER */}
       {!allUnlocked && (
         <div style={{ padding: "28px 40px 0", maxWidth: 860, margin: "0 auto" }}>
-          <div style={{
-            background: "linear-gradient(135deg, #F8F8F6 0%, #F0F0EE 100%)",
-            borderRadius: 16, padding: "24px 28px", border: "1px solid #E8E6E1",
-          }}>
+          <div style={{ background: "linear-gradient(135deg, #F8F8F6 0%, #F0F0EE 100%)", borderRadius: 16, padding: "24px 28px", border: "1px solid #E8E6E1" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 16, marginBottom: 20 }}>
               <div>
-                <div style={{ fontFamily: "'Sora', sans-serif", fontSize: 18, fontWeight: 700, marginBottom: 4 }}>
-                  Unlock the full playbook
-                </div>
-                <div style={{ fontSize: 13, color: "#6B6B7B" }}>
-                  Foundation is free. Purchase phases individually or save with the bundle.
-                </div>
+                <div style={{ fontFamily: "'Sora', sans-serif", fontSize: 18, fontWeight: 700, marginBottom: 4 }}>Unlock the full playbook</div>
+                <div style={{ fontSize: 13, color: "#6B6B7B" }}>Foundation is free. Purchase phases individually or save with the bundle.</div>
               </div>
               <a href={PURCHASE_LINKS.bundle} target="_blank" rel="noopener noreferrer" style={{
                 padding: "10px 24px", fontSize: 14, fontWeight: 600, display: "inline-block",
                 background: "linear-gradient(135deg, #1A8A64, #3D50AB)", color: "#fff",
                 borderRadius: 10, textDecoration: "none", whiteSpace: "nowrap",
-              }}>
-                Get Full Bundle — ${PRICING.bundle.price}
-              </a>
+              }}>Get Full Bundle — ${PRICING.bundle.price}</a>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
               {["clarity", "identity", "engine"].map(key => {
@@ -579,10 +585,9 @@ export default function BrandPlaybook() {
                           background: phaseConfig[phaseName].color, color: "#fff", borderRadius: 8, textDecoration: "none",
                         }}>Purchase</a>
                         <button onClick={() => { setCodeModal(phaseName); setCodeInput(""); setCodeError(""); }}
-                          style={{
-                            padding: "8px 12px", fontSize: 12, fontWeight: 500,
-                            background: "#F3F3F1", color: "#6B6B7B", border: "none", borderRadius: 8, cursor: "pointer",
-                          }}>Have a code?</button>
+                          style={{ padding: "8px 12px", fontSize: 12, fontWeight: 500, background: "#F3F3F1", color: "#6B6B7B", border: "none", borderRadius: 8, cursor: "pointer" }}>
+                          Have a code?
+                        </button>
                       </div>
                     )}
                   </div>
@@ -674,10 +679,7 @@ export default function BrandPlaybook() {
                               {done && <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 6.5L5 9L9.5 3.5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                             </button>
                             <div style={{ flex: 1 }}>
-                              <div style={{
-                                fontSize: 13, fontWeight: 600, color: done ? ch.accent : "#1a1a2e",
-                                textDecoration: done ? "line-through" : "none", opacity: done ? 0.65 : 1, marginBottom: 3,
-                              }}>{ex.name}</div>
+                              <div style={{ fontSize: 13, fontWeight: 600, color: done ? ch.accent : "#1a1a2e", textDecoration: done ? "line-through" : "none", opacity: done ? 0.65 : 1, marginBottom: 3 }}>{ex.name}</div>
                               <div style={{ fontSize: 12, color: "#8B8B9B", lineHeight: 1.55 }}>{ex.short}</div>
                             </div>
                           </div>
@@ -703,13 +705,9 @@ export default function BrandPlaybook() {
                           const saved = state.links[tk];
                           const editing = editingLink === tk;
                           return (
-                            <div key={i} style={{
-                              padding: "10px 12px", background: "#FAFAF8", borderRadius: 10,
-                              border: saved ? `1px solid ${ch.accent}25` : "1px solid #ECEAE5",
-                            }}>
+                            <div key={i} style={{ padding: "10px 12px", background: "#FAFAF8", borderRadius: 10, border: saved ? `1px solid ${ch.accent}25` : "1px solid #ECEAE5" }}>
                               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                                <a href={tool.url} target="_blank" rel="noopener noreferrer"
-                                  style={{ fontSize: 13, fontWeight: 600, color: "#1a1a2e", textDecoration: "none" }}>
+                                <a href={tool.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, fontWeight: 600, color: "#1a1a2e", textDecoration: "none" }}>
                                   {tool.name} <span style={{ fontSize: 10, opacity: 0.35 }}>↗</span>
                                 </a>
                                 {!editing && (
@@ -738,7 +736,6 @@ export default function BrandPlaybook() {
                       </div>
                     </div>
 
-                    {/* MY FILES & LINKS */}
                     <div style={{ marginBottom: 22 }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
                         <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: ch.accent }}>My Files & Links</div>
