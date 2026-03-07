@@ -1,5 +1,59 @@
 import { useState, useEffect, useCallback } from "react";
 
+// ============================================================
+// UNLOCK CODE CONFIGURATION
+// ============================================================
+// Set your unlock codes here. These are the codes buyers receive
+// after purchasing on Lemon Squeezy / Gumroad.
+//
+// To change a code: update the string below and redeploy.
+// Codes are case-insensitive when buyers enter them.
+//
+// NOTE: Client-side app — determined users could find these in
+// source. For this price point, honor system + friction is fine.
+// For bulletproof protection later, add a backend.
+// ============================================================
+
+const UNLOCK_CODES = {
+  clarity:  "CLARITY-2025",
+  identity: "IDENTITY-2025",
+  engine:   "ENGINE-2025",
+  bundle:   "FULLBRAND-2025",
+};
+
+// ============================================================
+// PURCHASE LINKS — replace with your Lemon Squeezy URLs
+// ============================================================
+
+const PURCHASE_LINKS = {
+  clarity:  "https://your-store.lemonsqueezy.com/buy/clarity",
+  identity: "https://your-store.lemonsqueezy.com/buy/identity",
+  engine:   "https://your-store.lemonsqueezy.com/buy/engine",
+  bundle:   "https://your-store.lemonsqueezy.com/buy/bundle",
+};
+
+// ============================================================
+// PRICING
+// ============================================================
+
+const PRICING = {
+  clarity:  { price: 29, label: "Clarity Phase", desc: "Ch. 01–04 · Problem, customer, niche, strategy" },
+  identity: { price: 39, label: "Identity Phase", desc: "Ch. 05–08 · Voice, visuals, name, web copy" },
+  engine:   { price: 29, label: "Engine Phase", desc: "Ch. 09–10 · Monetization and launch" },
+  bundle:   { price: 79, label: "Full Playbook", desc: "All 11 chapters · Save $18" },
+};
+
+const PHASE_UNLOCK_MAP = {
+  Foundation: null,
+  Clarity: "clarity",
+  Identity: "identity",
+  Engine: "engine",
+};
+
+// ============================================================
+// CHAPTER DATA
+// ============================================================
+
 const chapters = [
   {
     number: "00", phase: "Foundation", title: "The Intake", subtitle: "What are we actually working with?",
@@ -239,8 +293,17 @@ const phaseConfig = {
 
 const STORAGE_KEY = "brand-playbook-state";
 
+function LockIcon({ size = 14, color = "#AAA" }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none">
+      <rect x="3" y="7" width="10" height="7" rx="1.5" stroke={color} strokeWidth="1.5" />
+      <path d="M5 7V5a3 3 0 0 1 6 0v2" stroke={color} strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export default function BrandPlaybook() {
-  const [state, setState] = useState({ checked: {}, links: {}, myLinks: {} });
+  const [state, setState] = useState({ checked: {}, links: {}, myLinks: {}, unlocked: {} });
   const [active, setActive] = useState(null);
   const [loaded, setLoaded] = useState(false);
   const [editingLink, setEditingLink] = useState(null);
@@ -248,13 +311,16 @@ export default function BrandPlaybook() {
   const [addingMyLink, setAddingMyLink] = useState(null);
   const [myLinkLabel, setMyLinkLabel] = useState("");
   const [myLinkUrl, setMyLinkUrl] = useState("");
+  const [codeModal, setCodeModal] = useState(null);
+  const [codeInput, setCodeInput] = useState("");
+  const [codeError, setCodeError] = useState("");
 
   useEffect(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
-        setState({ checked: {}, links: {}, myLinks: {}, ...parsed });
+        setState({ checked: {}, links: {}, myLinks: {}, unlocked: {}, ...parsed });
       }
     } catch (e) {}
     setLoaded(true);
@@ -264,6 +330,31 @@ export default function BrandPlaybook() {
     setState(newState);
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(newState)); } catch (e) {}
   }, []);
+
+  const isPhaseUnlocked = (phase) => {
+    if (phase === "Foundation") return true;
+    const key = PHASE_UNLOCK_MAP[phase];
+    if (!key) return true;
+    return state.unlocked[key] === true || state.unlocked["bundle"] === true;
+  };
+
+  const tryUnlock = () => {
+    const input = codeInput.trim().toUpperCase();
+    if (!input) { setCodeError("Please enter a code."); return; }
+    let matched = null;
+    for (const [key, code] of Object.entries(UNLOCK_CODES)) {
+      if (input === code.toUpperCase()) { matched = key; break; }
+    }
+    if (matched) {
+      const next = { ...state, unlocked: { ...state.unlocked, [matched]: true } };
+      save(next);
+      setCodeModal(null);
+      setCodeInput("");
+      setCodeError("");
+    } else {
+      setCodeError("Invalid code. Please check and try again.");
+    }
+  };
 
   const toggleCheck = (id) => {
     const next = { ...state, checked: { ...state.checked, [id]: !state.checked[id] } };
@@ -314,9 +405,62 @@ export default function BrandPlaybook() {
 
   const total = getTotalProgress();
   const pct = total.total > 0 ? Math.round((total.done / total.total) * 100) : 0;
+  const allUnlocked = isPhaseUnlocked("Clarity") && isPhaseUnlocked("Identity") && isPhaseUnlocked("Engine");
 
   return (
     <div style={{ minHeight: "100vh", background: "#FAFAF8", fontFamily: "'DM Sans', system-ui, -apple-system, sans-serif", color: "#1a1a2e" }}>
+
+      {/* CODE UNLOCK MODAL */}
+      {codeModal && (
+        <div style={{
+          position: "fixed", inset: 0, zIndex: 1000, background: "rgba(0,0,0,0.4)",
+          display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
+          backdropFilter: "blur(4px)",
+        }} onClick={() => { setCodeModal(null); setCodeInput(""); setCodeError(""); }}>
+          <div style={{
+            background: "#fff", borderRadius: 20, padding: "36px 32px", maxWidth: 420, width: "100%",
+            boxShadow: "0 20px 60px rgba(0,0,0,0.15)",
+          }} onClick={e => e.stopPropagation()}>
+            <div style={{
+              width: 48, height: 48, borderRadius: 14,
+              background: `${phaseConfig[codeModal]?.color || "#1A8A64"}12`,
+              display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 20,
+            }}>
+              <LockIcon size={22} color={phaseConfig[codeModal]?.color || "#1A8A64"} />
+            </div>
+            <h3 style={{ fontFamily: "'Sora', sans-serif", fontSize: 20, fontWeight: 700, marginBottom: 8 }}>
+              Unlock {codeModal}
+            </h3>
+            <p style={{ fontSize: 14, color: "#6B6B7B", marginBottom: 24, lineHeight: 1.6 }}>
+              Enter the unlock code you received after purchase.
+            </p>
+            <input
+              value={codeInput}
+              onChange={e => { setCodeInput(e.target.value); setCodeError(""); }}
+              onKeyDown={e => { if (e.key === "Enter") tryUnlock(); }}
+              placeholder="Enter your unlock code..."
+              autoFocus
+              style={{
+                width: "100%", padding: "12px 16px", fontSize: 15, border: codeError ? "2px solid #E55" : "2px solid #E8E6E1",
+                borderRadius: 12, outline: "none", fontFamily: "inherit", background: "#FAFAF8",
+                boxSizing: "border-box",
+              }}
+            />
+            {codeError && <div style={{ fontSize: 13, color: "#E55", marginTop: 8, fontWeight: 500 }}>{codeError}</div>}
+            <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
+              <button onClick={tryUnlock} style={{
+                flex: 1, padding: "12px 20px", fontSize: 14, fontWeight: 600,
+                background: phaseConfig[codeModal]?.color || "#1A8A64", color: "#fff",
+                border: "none", borderRadius: 12, cursor: "pointer",
+              }}>Unlock</button>
+              <button onClick={() => { setCodeModal(null); setCodeInput(""); setCodeError(""); }} style={{
+                padding: "12px 20px", fontSize: 14, background: "#F3F3F1", color: "#6B6B7B",
+                border: "none", borderRadius: 12, cursor: "pointer",
+              }}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* HEADER */}
       <div style={{ padding: "48px 40px 36px", background: "#fff", borderBottom: "1px solid #E8E6E1" }}>
@@ -331,10 +475,9 @@ export default function BrandPlaybook() {
                 <span style={{ background: "linear-gradient(135deg, #1A8A64, #3D50AB, #7B3FBE)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>Playbook</span>
               </h1>
               <p style={{ fontSize: 14, color: "#8B8B9B", margin: 0, maxWidth: 400 }}>
-                11 chapters. Check off exercises, link your resources, build the brand.
+                11 chapters. Track your progress, link your resources, build the brand.
               </p>
             </div>
-            {/* Progress Ring */}
             <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
               <div style={{ position: "relative", width: 68, height: 68 }}>
                 <svg width="68" height="68" viewBox="0 0 68 68">
@@ -365,14 +508,18 @@ export default function BrandPlaybook() {
               const pIds = chapters.filter(c => p.chs.includes(c.number)).flatMap(c => c.exercises.map(e => e.id));
               const pDone = pIds.filter(id => state.checked[id]).length;
               const pPct = pIds.length > 0 ? Math.round((pDone / pIds.length) * 100) : 0;
+              const unlocked = isPhaseUnlocked(p.phase);
               return (
                 <div key={p.phase} style={{ padding: "10px 12px", background: "#FAFAF8", borderRadius: 10, border: "1px solid #ECEAE5" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                    <span style={{ fontSize: 12, fontWeight: 600, color: phaseConfig[p.phase].color }}>{p.phase}</span>
-                    <span style={{ fontSize: 11, color: "#AAAABC" }}>{pPct}%</span>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: phaseConfig[p.phase].color, display: "flex", alignItems: "center", gap: 5 }}>
+                      {!unlocked && <LockIcon size={11} color={phaseConfig[p.phase].color} />}
+                      {p.phase}
+                    </span>
+                    <span style={{ fontSize: 11, color: "#AAAABC" }}>{unlocked ? `${pPct}%` : "Locked"}</span>
                   </div>
                   <div style={{ height: 4, background: "#ECEAE5", borderRadius: 2, overflow: "hidden" }}>
-                    <div style={{ height: "100%", background: phaseConfig[p.phase].color, borderRadius: 2, width: `${pPct}%`, transition: "width 0.4s" }} />
+                    <div style={{ height: "100%", background: unlocked ? phaseConfig[p.phase].color : "#D0D0D8", borderRadius: 2, width: unlocked ? `${pPct}%` : "0%", transition: "width 0.4s" }} />
                   </div>
                 </div>
               );
@@ -381,58 +528,133 @@ export default function BrandPlaybook() {
         </div>
       </div>
 
+      {/* PRICING BANNER */}
+      {!allUnlocked && (
+        <div style={{ padding: "28px 40px 0", maxWidth: 860, margin: "0 auto" }}>
+          <div style={{
+            background: "linear-gradient(135deg, #F8F8F6 0%, #F0F0EE 100%)",
+            borderRadius: 16, padding: "24px 28px", border: "1px solid #E8E6E1",
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 16, marginBottom: 20 }}>
+              <div>
+                <div style={{ fontFamily: "'Sora', sans-serif", fontSize: 18, fontWeight: 700, marginBottom: 4 }}>
+                  Unlock the full playbook
+                </div>
+                <div style={{ fontSize: 13, color: "#6B6B7B" }}>
+                  Foundation is free. Purchase phases individually or save with the bundle.
+                </div>
+              </div>
+              <a href={PURCHASE_LINKS.bundle} target="_blank" rel="noopener noreferrer" style={{
+                padding: "10px 24px", fontSize: 14, fontWeight: 600, display: "inline-block",
+                background: "linear-gradient(135deg, #1A8A64, #3D50AB)", color: "#fff",
+                borderRadius: 10, textDecoration: "none", whiteSpace: "nowrap",
+              }}>
+                Get Full Bundle — ${PRICING.bundle.price}
+              </a>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
+              {["clarity", "identity", "engine"].map(key => {
+                const p = PRICING[key];
+                const phaseName = key.charAt(0).toUpperCase() + key.slice(1);
+                const unlocked = isPhaseUnlocked(phaseName);
+                return (
+                  <div key={key} style={{
+                    padding: "14px 16px", background: "#fff", borderRadius: 12,
+                    border: unlocked ? `1px solid ${phaseConfig[phaseName].color}30` : "1px solid #E8E6E1",
+                    opacity: unlocked ? 0.6 : 1,
+                  }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                      <span style={{ fontSize: 14, fontWeight: 600 }}>{p.label}</span>
+                      {unlocked ? (
+                        <span style={{ fontSize: 11, fontWeight: 600, color: "#1A8A64", background: "#EDFAF5", padding: "2px 8px", borderRadius: 6 }}>Unlocked</span>
+                      ) : (
+                        <span style={{ fontSize: 15, fontWeight: 700 }}>${p.price}</span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: 12, color: "#8B8B9B", marginBottom: unlocked ? 0 : 12 }}>{p.desc}</div>
+                    {!unlocked && (
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <a href={PURCHASE_LINKS[key]} target="_blank" rel="noopener noreferrer" style={{
+                          flex: 1, padding: "8px 0", fontSize: 12, fontWeight: 600, textAlign: "center",
+                          background: phaseConfig[phaseName].color, color: "#fff", borderRadius: 8, textDecoration: "none",
+                        }}>Purchase</a>
+                        <button onClick={() => { setCodeModal(phaseName); setCodeInput(""); setCodeError(""); }}
+                          style={{
+                            padding: "8px 12px", fontSize: 12, fontWeight: 500,
+                            background: "#F3F3F1", color: "#6B6B7B", border: "none", borderRadius: 8, cursor: "pointer",
+                          }}>Have a code?</button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* CHAPTERS */}
       <div style={{ padding: "28px 40px 64px", maxWidth: 860, margin: "0 auto" }}>
         {chapters.map((ch) => {
           const isOpen = active === ch.number;
           const prog = getChapterProgress(ch);
           const isDone = prog.done === prog.total;
+          const unlocked = isPhaseUnlocked(ch.phase);
 
           return (
             <div key={ch.number} style={{
               marginBottom: 6, borderRadius: 14, overflow: "hidden",
-              border: isOpen ? `1.5px solid ${ch.accent}40` : `1px solid #ECEAE5`,
-              background: "#fff", boxShadow: isOpen ? `0 4px 20px ${ch.accent}08` : "none",
-              transition: "all 0.15s",
+              border: isOpen && unlocked ? `1.5px solid ${ch.accent}40` : `1px solid #ECEAE5`,
+              background: "#fff", boxShadow: isOpen && unlocked ? `0 4px 20px ${ch.accent}08` : "none",
+              transition: "all 0.15s", opacity: unlocked ? 1 : 0.85,
             }}>
-              <div onClick={() => setActive(isOpen ? null : ch.number)}
+              <div onClick={() => unlocked ? setActive(isOpen ? null : ch.number) : setCodeModal(ch.phase)}
                 style={{ padding: "14px 18px", display: "flex", alignItems: "center", gap: 12, cursor: "pointer" }}>
-                {/* Badge */}
                 <div style={{
                   width: 36, height: 36, borderRadius: 10, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
-                  background: isDone ? ch.accent : isOpen ? ch.accent : ch.pill,
-                  color: isDone || isOpen ? "#fff" : ch.accent,
+                  background: !unlocked ? "#E8E6E1" : isDone ? ch.accent : isOpen ? ch.accent : ch.pill,
+                  color: !unlocked ? "#AAAABC" : (isDone || isOpen ? "#fff" : ch.accent),
                   fontSize: 13, fontWeight: 700, fontFamily: "'Sora', sans-serif", transition: "all 0.2s",
                 }}>
-                  {isDone ? <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3.5 8.5L6.5 11.5L12.5 4.5" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg> : ch.number}
+                  {!unlocked ? <LockIcon size={14} color="#AAAABC" /> :
+                    isDone ? <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3.5 8.5L6.5 11.5L12.5 4.5" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg> : ch.number}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
-                    <span style={{ fontSize: 15, fontWeight: 600, color: isDone ? ch.accent : "#1a1a2e" }}>{ch.title}</span>
+                    <span style={{ fontSize: 15, fontWeight: 600, color: !unlocked ? "#AAAABC" : isDone ? ch.accent : "#1a1a2e" }}>{ch.title}</span>
                     <span style={{ fontSize: 12, color: "#BBBBCC", fontStyle: "italic" }}>{ch.subtitle}</span>
                   </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 5 }}>
-                    <div style={{ flex: 1, maxWidth: 110, height: 3, background: "#ECEAE5", borderRadius: 2, overflow: "hidden" }}>
-                      <div style={{ height: "100%", background: ch.accent, borderRadius: 2, width: `${(prog.done / prog.total) * 100}%`, transition: "width 0.3s" }} />
+                  {unlocked ? (
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 5 }}>
+                      <div style={{ flex: 1, maxWidth: 110, height: 3, background: "#ECEAE5", borderRadius: 2, overflow: "hidden" }}>
+                        <div style={{ height: "100%", background: ch.accent, borderRadius: 2, width: `${(prog.done / prog.total) * 100}%`, transition: "width 0.3s" }} />
+                      </div>
+                      <span style={{ fontSize: 11, color: "#AAAABC", fontWeight: 500 }}>{prog.done}/{prog.total}</span>
                     </div>
-                    <span style={{ fontSize: 11, color: "#AAAABC", fontWeight: 500 }}>{prog.done}/{prog.total}</span>
-                  </div>
+                  ) : (
+                    <div style={{ fontSize: 11, color: "#BBBBCC", marginTop: 5, display: "flex", alignItems: "center", gap: 4 }}>
+                      <LockIcon size={10} color="#CCC" /> Unlock {ch.phase} to access
+                    </div>
+                  )}
                 </div>
                 <span style={{
                   padding: "3px 10px", borderRadius: 8, fontSize: 10, fontWeight: 600,
-                  background: isOpen ? `${ch.accent}12` : "#F3F3F1", color: isOpen ? ch.accent : "#AAAABC",
+                  background: isOpen && unlocked ? `${ch.accent}12` : "#F3F3F1", color: isOpen && unlocked ? ch.accent : "#AAAABC",
                   letterSpacing: "0.04em", textTransform: "uppercase",
                 }}>{ch.duration}</span>
-                <span style={{ fontSize: 12, color: "#CCC", transform: isOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>▾</span>
+                {unlocked ? (
+                  <span style={{ fontSize: 12, color: "#CCC", transform: isOpen ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>▾</span>
+                ) : (
+                  <LockIcon size={14} color="#D0D0D8" />
+                )}
               </div>
 
-              {isOpen && (
+              {isOpen && unlocked && (
                 <div style={{ padding: "0 18px 22px", borderTop: `1px solid ${ch.accent}12` }}>
                   <div style={{ paddingLeft: 48, marginTop: 16 }}>
                     <p style={{ fontSize: 14, fontStyle: "italic", color: ch.accent, marginBottom: 10, fontWeight: 500, lineHeight: 1.5 }}>"{ch.tagline}"</p>
                     <p style={{ fontSize: 13, color: "#6B6B7B", lineHeight: 1.7, marginBottom: 22, maxWidth: 580 }}>{ch.description}</p>
 
-                    {/* EXERCISES */}
                     <div style={{ marginBottom: 22 }}>
                       <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: ch.accent, marginBottom: 12 }}>Exercises</div>
                       {ch.exercises.map((ex) => {
@@ -442,21 +664,19 @@ export default function BrandPlaybook() {
                             display: "flex", gap: 12, padding: "12px 14px", marginBottom: 5,
                             background: done ? `${ch.accent}06` : "#FAFAF8", borderRadius: 10,
                             borderLeft: `3px solid ${done ? ch.accent : ch.accent + "25"}`,
-                            transition: "all 0.15s",
                           }}>
                             <button onClick={(e) => { e.stopPropagation(); toggleCheck(ex.id); }} style={{
                               width: 22, height: 22, borderRadius: 7, flexShrink: 0, marginTop: 1,
                               border: done ? `2px solid ${ch.accent}` : "2px solid #D0D0D8",
                               background: done ? ch.accent : "#fff", cursor: "pointer",
-                              display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s",
+                              display: "flex", alignItems: "center", justifyContent: "center",
                             }}>
                               {done && <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 6.5L5 9L9.5 3.5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                             </button>
                             <div style={{ flex: 1 }}>
                               <div style={{
                                 fontSize: 13, fontWeight: 600, color: done ? ch.accent : "#1a1a2e",
-                                textDecoration: done ? "line-through" : "none", opacity: done ? 0.65 : 1,
-                                marginBottom: 3, transition: "all 0.15s",
+                                textDecoration: done ? "line-through" : "none", opacity: done ? 0.65 : 1, marginBottom: 3,
                               }}>{ex.name}</div>
                               <div style={{ fontSize: 12, color: "#8B8B9B", lineHeight: 1.55 }}>{ex.short}</div>
                             </div>
@@ -465,7 +685,6 @@ export default function BrandPlaybook() {
                       })}
                     </div>
 
-                    {/* KEY DECISIONS */}
                     <div style={{ background: "#F7F7F5", borderRadius: 10, padding: "14px 16px", marginBottom: 22, border: `1px solid ${ch.accent}10` }}>
                       <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: ch.accent, marginBottom: 10 }}>Key Decisions</div>
                       {ch.keyDecisions.map((d, i) => (
@@ -476,7 +695,6 @@ export default function BrandPlaybook() {
                       ))}
                     </div>
 
-                    {/* TOOLS */}
                     <div style={{ marginBottom: 22 }}>
                       <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: ch.accent, marginBottom: 12 }}>Tools & Resources</div>
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
@@ -496,19 +714,14 @@ export default function BrandPlaybook() {
                                 </a>
                                 {!editing && (
                                   <button onClick={(e) => { e.stopPropagation(); setEditingLink(tk); setLinkInput(saved || ""); }}
-                                    style={{
-                                      fontSize: 10, fontWeight: 600, color: saved ? ch.accent : "#AAA",
-                                      background: saved ? `${ch.accent}10` : "#F0F0EE",
-                                      border: "none", borderRadius: 6, padding: "2px 7px", cursor: "pointer",
-                                    }}>
+                                    style={{ fontSize: 10, fontWeight: 600, color: saved ? ch.accent : "#AAA", background: saved ? `${ch.accent}10` : "#F0F0EE", border: "none", borderRadius: 6, padding: "2px 7px", cursor: "pointer" }}>
                                     {saved ? "linked ✓" : "+ link"}
                                   </button>
                                 )}
                               </div>
                               {editing && (
                                 <div style={{ display: "flex", gap: 5, marginTop: 8 }} onClick={e => e.stopPropagation()}>
-                                  <input value={linkInput} onChange={e => setLinkInput(e.target.value)}
-                                    placeholder="Your resource URL..." autoFocus
+                                  <input value={linkInput} onChange={e => setLinkInput(e.target.value)} placeholder="Your resource URL..." autoFocus
                                     onKeyDown={e => { if (e.key === "Enter") saveLink(tk); if (e.key === "Escape") { setEditingLink(null); setLinkInput(""); } }}
                                     style={{ flex: 1, padding: "5px 9px", fontSize: 12, border: `1px solid ${ch.accent}40`, borderRadius: 7, outline: "none", fontFamily: "inherit", background: "#fff" }} />
                                   <button onClick={() => saveLink(tk)} style={{ padding: "5px 10px", fontSize: 11, fontWeight: 600, background: ch.accent, color: "#fff", border: "none", borderRadius: 7, cursor: "pointer" }}>Save</button>
@@ -516,11 +729,8 @@ export default function BrandPlaybook() {
                                 </div>
                               )}
                               {!editing && saved && (
-                                <a href={saved.startsWith("http") ? saved : `https://${saved}`}
-                                  target="_blank" rel="noopener noreferrer"
-                                  style={{ fontSize: 11, color: ch.accent, textDecoration: "none", display: "block", marginTop: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                                  {saved}
-                                </a>
+                                <a href={saved.startsWith("http") ? saved : `https://${saved}`} target="_blank" rel="noopener noreferrer"
+                                  style={{ fontSize: 11, color: ch.accent, textDecoration: "none", display: "block", marginTop: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{saved}</a>
                               )}
                             </div>
                           );
@@ -531,116 +741,60 @@ export default function BrandPlaybook() {
                     {/* MY FILES & LINKS */}
                     <div style={{ marginBottom: 22 }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: ch.accent }}>
-                          My Files & Links
-                        </div>
+                        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: ch.accent }}>My Files & Links</div>
                         {addingMyLink !== ch.number && (
                           <button onClick={(e) => { e.stopPropagation(); setAddingMyLink(ch.number); setMyLinkLabel(""); setMyLinkUrl(""); }}
-                            style={{
-                              fontSize: 11, fontWeight: 600, color: ch.accent, background: `${ch.accent}10`,
-                              border: `1px dashed ${ch.accent}40`, borderRadius: 8, padding: "5px 12px", cursor: "pointer",
-                              display: "flex", alignItems: "center", gap: 4,
-                            }}>
+                            style={{ fontSize: 11, fontWeight: 600, color: ch.accent, background: `${ch.accent}10`, border: `1px dashed ${ch.accent}40`, borderRadius: 8, padding: "5px 12px", cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}>
                             <span style={{ fontSize: 14, lineHeight: 1 }}>+</span> Add link or file
                           </button>
                         )}
                       </div>
-
-                      {/* Add form */}
                       {addingMyLink === ch.number && (
-                        <div style={{
-                          padding: "14px 16px", background: "#FAFAF8", borderRadius: 12,
-                          border: `1px dashed ${ch.accent}40`, marginBottom: 10,
-                        }} onClick={e => e.stopPropagation()}>
-                          <input value={myLinkLabel} onChange={e => setMyLinkLabel(e.target.value)}
-                            placeholder="Label (e.g. 'Session 1 Notes', 'Mood Board v2')"
-                            autoFocus
+                        <div style={{ padding: "14px 16px", background: "#FAFAF8", borderRadius: 12, border: `1px dashed ${ch.accent}40`, marginBottom: 10 }} onClick={e => e.stopPropagation()}>
+                          <input value={myLinkLabel} onChange={e => setMyLinkLabel(e.target.value)} placeholder="Label (e.g. 'Session 1 Notes')" autoFocus
                             onKeyDown={e => { if (e.key === "Enter" && myLinkLabel.trim()) addMyLink(ch.number); if (e.key === "Escape") { setAddingMyLink(null); setMyLinkLabel(""); setMyLinkUrl(""); } }}
-                            style={{
-                              width: "100%", padding: "8px 10px", fontSize: 13, border: "1px solid #E0E0DE",
-                              borderRadius: 8, outline: "none", fontFamily: "inherit", background: "#fff", marginBottom: 8,
-                              boxSizing: "border-box",
-                            }} />
-                          <input value={myLinkUrl} onChange={e => setMyLinkUrl(e.target.value)}
-                            placeholder="URL (optional — paste Google Doc, Figma, Drive link, etc.)"
+                            style={{ width: "100%", padding: "8px 10px", fontSize: 13, border: "1px solid #E0E0DE", borderRadius: 8, outline: "none", fontFamily: "inherit", background: "#fff", marginBottom: 8, boxSizing: "border-box" }} />
+                          <input value={myLinkUrl} onChange={e => setMyLinkUrl(e.target.value)} placeholder="URL (optional)"
                             onKeyDown={e => { if (e.key === "Enter" && myLinkLabel.trim()) addMyLink(ch.number); if (e.key === "Escape") { setAddingMyLink(null); setMyLinkLabel(""); setMyLinkUrl(""); } }}
-                            style={{
-                              width: "100%", padding: "8px 10px", fontSize: 13, border: "1px solid #E0E0DE",
-                              borderRadius: 8, outline: "none", fontFamily: "inherit", background: "#fff", marginBottom: 10,
-                              boxSizing: "border-box",
-                            }} />
+                            style={{ width: "100%", padding: "8px 10px", fontSize: 13, border: "1px solid #E0E0DE", borderRadius: 8, outline: "none", fontFamily: "inherit", background: "#fff", marginBottom: 10, boxSizing: "border-box" }} />
                           <div style={{ display: "flex", gap: 6 }}>
-                            <button onClick={() => addMyLink(ch.number)}
-                              disabled={!myLinkLabel.trim()}
-                              style={{
-                                padding: "7px 16px", fontSize: 12, fontWeight: 600, background: myLinkLabel.trim() ? ch.accent : "#D0D0D8",
-                                color: "#fff", border: "none", borderRadius: 8, cursor: myLinkLabel.trim() ? "pointer" : "default",
-                              }}>Add</button>
+                            <button onClick={() => addMyLink(ch.number)} disabled={!myLinkLabel.trim()}
+                              style={{ padding: "7px 16px", fontSize: 12, fontWeight: 600, background: myLinkLabel.trim() ? ch.accent : "#D0D0D8", color: "#fff", border: "none", borderRadius: 8, cursor: myLinkLabel.trim() ? "pointer" : "default" }}>Add</button>
                             <button onClick={() => { setAddingMyLink(null); setMyLinkLabel(""); setMyLinkUrl(""); }}
                               style={{ padding: "7px 14px", fontSize: 12, background: "#F0F0EE", color: "#6B6B7B", border: "none", borderRadius: 8, cursor: "pointer" }}>Cancel</button>
                           </div>
                         </div>
                       )}
-
-                      {/* Existing links */}
                       {(state.myLinks[ch.number] || []).length > 0 ? (
                         <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
                           {(state.myLinks[ch.number] || []).map((entry) => (
-                            <div key={entry.id} style={{
-                              display: "flex", alignItems: "center", gap: 10, padding: "10px 12px",
-                              background: "#FAFAF8", borderRadius: 10, border: "1px solid #ECEAE5",
-                              transition: "all 0.15s",
-                            }}>
-                              <div style={{
-                                width: 28, height: 28, borderRadius: 8, flexShrink: 0,
-                                background: entry.url ? `${ch.accent}12` : "#F0F0EE",
-                                display: "flex", alignItems: "center", justifyContent: "center",
-                                fontSize: 13,
-                              }}>
+                            <div key={entry.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", background: "#FAFAF8", borderRadius: 10, border: "1px solid #ECEAE5" }}>
+                              <div style={{ width: 28, height: 28, borderRadius: 8, flexShrink: 0, background: entry.url ? `${ch.accent}12` : "#F0F0EE", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13 }}>
                                 {entry.url ? "🔗" : "📄"}
                               </div>
                               <div style={{ flex: 1, minWidth: 0 }}>
                                 {entry.url ? (
-                                  <a href={entry.url.startsWith("http") ? entry.url : `https://${entry.url}`}
-                                    target="_blank" rel="noopener noreferrer"
-                                    style={{ fontSize: 13, fontWeight: 600, color: "#1a1a2e", textDecoration: "none", display: "block" }}>
-                                    {entry.label} <span style={{ fontSize: 10, opacity: 0.35 }}>↗</span>
-                                  </a>
+                                  <a href={entry.url.startsWith("http") ? entry.url : `https://${entry.url}`} target="_blank" rel="noopener noreferrer"
+                                    style={{ fontSize: 13, fontWeight: 600, color: "#1a1a2e", textDecoration: "none" }}>{entry.label} <span style={{ fontSize: 10, opacity: 0.35 }}>↗</span></a>
                                 ) : (
-                                  <span style={{ fontSize: 13, fontWeight: 600, color: "#1a1a2e" }}>{entry.label}</span>
+                                  <span style={{ fontSize: 13, fontWeight: 600 }}>{entry.label}</span>
                                 )}
-                                {entry.url && (
-                                  <div style={{ fontSize: 11, color: "#AAAABC", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: 2 }}>
-                                    {entry.url}
-                                  </div>
-                                )}
+                                {entry.url && <div style={{ fontSize: 11, color: "#AAAABC", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: 2 }}>{entry.url}</div>}
                               </div>
                               <button onClick={(e) => { e.stopPropagation(); removeMyLink(ch.number, entry.id); }}
-                                style={{
-                                  width: 24, height: 24, borderRadius: 6, border: "none", background: "transparent",
-                                  color: "#CCCCCC", cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center",
-                                  flexShrink: 0, transition: "color 0.15s",
-                                }}
-                                onMouseEnter={e => e.currentTarget.style.color = "#E55"}
-                                onMouseLeave={e => e.currentTarget.style.color = "#CCC"}
-                              >×</button>
+                                style={{ width: 24, height: 24, borderRadius: 6, border: "none", background: "transparent", color: "#CCC", cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}
+                                onMouseEnter={e => e.currentTarget.style.color = "#E55"} onMouseLeave={e => e.currentTarget.style.color = "#CCC"}>×</button>
                             </div>
                           ))}
                         </div>
                       ) : addingMyLink !== ch.number && (
-                        <div style={{
-                          padding: "20px 16px", background: "#FAFAF8", borderRadius: 12,
-                          border: "1px dashed #DDDDD8", textAlign: "center",
-                        }}>
+                        <div style={{ padding: "20px 16px", background: "#FAFAF8", borderRadius: 12, border: "1px dashed #DDDDD8", textAlign: "center" }}>
                           <div style={{ fontSize: 20, marginBottom: 6, opacity: 0.4 }}>📎</div>
-                          <div style={{ fontSize: 12, color: "#AAAABC" }}>
-                            Drop your notes, docs, files, and links here
-                          </div>
+                          <div style={{ fontSize: 12, color: "#AAAABC" }}>Drop your notes, docs, files, and links here</div>
                         </div>
                       )}
                     </div>
 
-                    {/* DELIVERABLE */}
                     <div style={{ padding: "14px 16px", background: `${ch.accent}08`, borderRadius: 10, border: `1px solid ${ch.accent}12` }}>
                       <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: ch.accent, marginBottom: 4 }}>Deliverable</div>
                       <div style={{ fontFamily: "'Sora', sans-serif", fontSize: 14, fontWeight: 600 }}>{ch.deliverable}</div>
@@ -653,7 +807,6 @@ export default function BrandPlaybook() {
         })}
       </div>
 
-      {/* FOOTER */}
       <div style={{ borderTop: "1px solid #E8E6E1", padding: "20px 40px", display: "flex", justifyContent: "space-between", maxWidth: 860, margin: "0 auto" }}>
         <span style={{ fontSize: 12, color: "#AAAABC" }}>Marketing for Good — v2.0</span>
         <span style={{ fontSize: 12, color: "#AAAABC" }}>{total.done}/{total.total} complete</span>
