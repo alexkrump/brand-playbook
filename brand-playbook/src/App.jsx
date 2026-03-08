@@ -791,12 +791,32 @@ export default function BrandPlaybook() {
     return st.unlocked["p1full"] || st.unlocked[section==="A" ? "p1a" : "p1b"];
   };
 
-  const handleUnlock = () => {
+  const [unlocking, setUnlocking] = useState(false);
+
+  const handleUnlock = async () => {
     if (!unlockCode.trim()) { setUnlockErr("Please enter your access code."); return; }
-    // Replace with real LemonSqueezy order validation in production
-    // Any non-empty code unlocks for now — swap for API call to validate
-    save({ ...st, unlocked: { ...st.unlocked, [unlockModal.key]: true } });
-    setUnlockModal(null); setUnlockCode(""); setUnlockErr("");
+    setUnlocking(true);
+    setUnlockErr("");
+    try {
+      const res = await fetch("/api/validate-license", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: unlockCode.trim() }),
+      });
+      const data = await res.json();
+      if (!data.valid) {
+        setUnlockErr(data.error || "Invalid code. Please check and try again.");
+        setUnlocking(false);
+        return;
+      }
+      const newUnlocked = { ...st.unlocked };
+      data.unlocks.forEach(key => { newUnlocked[key] = true; });
+      save({ ...st, unlocked: newUnlocked });
+      setUnlockModal(null); setUnlockCode(""); setUnlockErr("");
+    } catch (err) {
+      setUnlockErr("Something went wrong. Please try again.");
+    }
+    setUnlocking(false);
   };
 
   const chapProg = (ch) => ({
@@ -860,7 +880,7 @@ export default function BrandPlaybook() {
               style={{width:"100%",padding:"11px 13px",fontSize:14,border:`1.5px solid ${unlockErr?"#E44":"#E0E0DE"}`,borderRadius:10,outline:"none",fontFamily:"inherit",background:"#FAFAF8",marginBottom:unlockErr?6:14,letterSpacing:"0.03em"}}
             />
             {unlockErr && <div style={{fontSize:12,color:"#E44",marginBottom:10}}>{unlockErr}</div>}
-            <button onClick={handleUnlock} className="btn-scale" style={{width:"100%",padding:"11px",fontSize:14,fontWeight:700,background:ac,color:"#fff",border:"none",borderRadius:10,cursor:"pointer",marginBottom:8}}>Unlock Content →</button>
+            <button onClick={handleUnlock} disabled={unlocking} className="btn-scale" style={{width:"100%",padding:"11px",fontSize:14,fontWeight:700,background:unlocking?"#AAAABC":ac,color:"#fff",border:"none",borderRadius:10,cursor:unlocking?"default":"pointer",marginBottom:8}}>{unlocking ? "Checking code…" : "Unlock Content →"}</button>
             <button onClick={()=>{setUnlockModal(null);setUnlockCode("");setUnlockErr("");}} style={{width:"100%",padding:"9px",fontSize:13,background:"#F0F0EE",color:"#777",border:"none",borderRadius:10,cursor:"pointer"}}>Cancel</button>
             <p style={{fontSize:11,color:"#BBBBCC",textAlign:"center",marginTop:14,lineHeight:1.5}}>Don't have a code yet? <a href={unlockModal.lsUrl} target="_blank" rel="noopener noreferrer" style={{color:ac,fontWeight:600,textDecoration:"none"}}>Purchase here →</a></p>
           </div>
