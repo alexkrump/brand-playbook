@@ -793,12 +793,22 @@ export default function BrandPlaybook() {
 
   const [unlocking, setUnlocking] = useState(false);
 
+  const ADMIN_CODE = "MFG-ADMIN-2025";
+
   const handleUnlock = async () => {
     if (!unlockCode.trim()) { setUnlockErr("Please enter your access code."); return; }
+
+    // Admin bypass — works without API route
+    if (unlockCode.trim() === ADMIN_CODE) {
+      save({ ...st, unlocked: { p1a: true, p1b: true, p1full: true } });
+      setUnlockModal(null); setUnlockCode(""); setUnlockErr("");
+      return;
+    }
+
     setUnlocking(true);
     setUnlockErr("");
     try {
-      const res = await fetch("/api/validate-license", {
+      const res = await fetch("/api/validate-key", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ code: unlockCode.trim() }),
@@ -814,7 +824,7 @@ export default function BrandPlaybook() {
       save({ ...st, unlocked: newUnlocked });
       setUnlockModal(null); setUnlockCode(""); setUnlockErr("");
     } catch (err) {
-      setUnlockErr("Something went wrong. Please try again.");
+      setUnlockErr("Invalid code. Please check and try again.");
     }
     setUnlocking(false);
   };
