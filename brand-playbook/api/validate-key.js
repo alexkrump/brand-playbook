@@ -1,89 +1,98 @@
-// /api/validate-key.js
-// Vercel serverless function that validates Lemon Squeezy license keys
+// pages/api/validate-license.js  (if using pages router)
+// app/api/validate-license/route.js  (if using app router — see bottom of file)
+//
+// This runs on the SERVER — your LemonSqueezy API key is never exposed to the browser.
 
+const PRODUCT_MAP = {
+  // Map your LemonSqueezy product IDs to your internal unlock keys
+  // Find Product ID: LemonSqueezy dashboard → click product → URL shows the ID
+  "YOUR_SECTION_A_PRODUCT_ID":   "p1a",
+  "YOUR_SECTION_B_PRODUCT_ID":   "p1b",
+  "YOUR_FULL_PHASE_PRODUCT_ID":  "p1full",
+  "YOUR_BUNDLE_PRODUCT_ID":      "bundle",
+};
+
+const ADMIN_CODE = "MFG-ADMIN-2025";
+
+// ─── PAGES ROUTER VERSION ────────────────────────────────────────────────────
 export default async function handler(req, res) {
-  // Only allow POST
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
-  }
+  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  const { licenseKey } = req.body;
+  const { code } = req.body;
+  if (!code) return res.status(400).json({ error: "No code provided" });
 
-  if (!licenseKey || typeof licenseKey !== "string" || licenseKey.trim().length === 0) {
-    return res.status(400).json({ error: "License key is required." });
+  // Admin bypass
+  if (code.trim() === ADMIN_CODE) {
+    return res.status(200).json({ valid: true, unlocks: ["p1a", "p1b", "p1full"] });
   }
 
   try {
-    // Activate the key with Lemon Squeezy (validates + marks as used)
-    const response = await fetch("https://api.lemonsqueezy.com/v1/licenses/activate", {
+    // Call LemonSqueezy to validate the license key
+    const response = await fetch("https://api.lemonsqueezy.com/v1/licenses/validate", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        license_key: licenseKey.trim(),
-        instance_name: "Brand Playbook",
-      }),
+      headers: {
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ license_key: code.trim() }),
     });
 
     const data = await response.json();
 
-    // If activation fails because already activated, try just validating
-    if (data.error && data.error === "license_key_already_activated") {
-      const validateResponse = await fetch("https://api.lemonsqueezy.com/v1/licenses/validate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          license_key: licenseKey.trim(),
-        }),
-      });
-      const validateData = await validateResponse.json();
-
-      if (!validateData.valid) {
-        return res.status(400).json({ error: "This license key has already been used." });
-      }
-
-      const productName = (validateData.meta?.product_name || "").toLowerCase();
-      const phase = mapProductToPhase(productName);
-
-      if (!phase) {
-        return res.status(400).json({ error: "Could not determine product. Please contact support." });
-      }
-
-      return res.status(200).json({ success: true, phase });
+    // LemonSqueezy returns { valid: true/false, license_key: { ... }, meta: { ... } }
+    if (!data.valid) {
+      return res.status(200).json({ valid: false, error: "Invalid or already used code." });
     }
 
-    // Check if activation was successful
-    if (!data.activated && !data.valid) {
-      return res.status(400).json({
-        error: data.error === "license_key_not_found"
-          ? "Invalid license key. Please check and try again."
-          : data.error === "license_key_expired"
-          ? "This license key has expired."
-          : data.error === "license_key_disabled"
-          ? "This license key has been disabled."
-          : "Invalid license key. Please check and try again.",
-      });
+    // Find which product this key belongs to
+    const productId = String(data.meta?.product_id);
+    const unlockKey = PRODUCT_MAP[productId];
+
+    if (!unlockKey) {
+      return res.status(200).json({ valid: false, error: "This code isn't valid for this product." });
     }
 
-    // Determine which phase to unlock based on product name
-    const productName = (data.meta?.product_name || "").toLowerCase();
-    const phase = mapProductToPhase(productName);
+    // If it's the full phase, unlock both sections too
+    const unlocks = unlockKey === "p1full"
+      ? ["p1a", "p1b", "p1full"]
+      : unlockKey === "bundle"
+      ? ["p1a", "p1b", "p1full", "bundle"]
+      : [unlockKey];
 
-    if (!phase) {
-      return res.status(400).json({ error: "Could not determine product. Please contact support." });
-    }
-
-    return res.status(200).json({ success: true, phase });
+    return res.status(200).json({ valid: true, unlocks });
 
   } catch (err) {
-    console.error("License validation error:", err);
+    console.error("LemonSqueezy validation error:", err);
     return res.status(500).json({ error: "Something went wrong. Please try again." });
   }
 }
 
-function mapProductToPhase(productName) {
-  if (productName.includes("bundle") || productName.includes("full")) return "bundle";
-  if (productName.includes("clarity")) return "clarity";
-  if (productName.includes("identity")) return "identity";
-  if (productName.includes("engine")) return "engine";
-  return null;
-}
+
+// ─── APP ROUTER VERSION ──────────────────────────────────────────────────────
+// If you're using the app/ directory, delete everything above and use this instead:
+//
+// export async function POST(req) {
+//   const { code } = await req.json();
+//   if (!code) return Response.json({ error: "No code provided" }, { status: 400 });
+//
+//   if (code.trim() === ADMIN_CODE) {
+//     return Response.json({ valid: true, unlocks: ["p1a", "p1b", "p1full"] });
+//   }
+//
+//   try {
+//     const response = await fetch("https://api.lemonsqueezy.com/v1/licenses/validate", {
+//       method: "POST",
+//       headers: { "Accept": "application/json", "Content-Type": "application/json" },
+//       body: JSON.stringify({ license_key: code.trim() }),
+//     });
+//     const data = await response.json();
+//     if (!data.valid) return Response.json({ valid: false, error: "Invalid or already used code." });
+//     const productId = String(data.meta?.product_id);
+//     const unlockKey = PRODUCT_MAP[productId];
+//     if (!unlockKey) return Response.json({ valid: false, error: "This code isn't valid for this product." });
+//     const unlocks = unlockKey === "p1full" ? ["p1a","p1b","p1full"] : unlockKey === "bundle" ? ["p1a","p1b","p1full","bundle"] : [unlockKey];
+//     return Response.json({ valid: true, unlocks });
+//   } catch (err) {
+//     return Response.json({ error: "Something went wrong." }, { status: 500 });
+//   }
+// }
