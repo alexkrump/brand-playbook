@@ -6,10 +6,10 @@
 const PRODUCT_MAP = {
   // Map your LemonSqueezy product IDs to your internal unlock keys
   // Find Product ID: LemonSqueezy dashboard → click product → URL shows the ID
-  "YOUR_SECTION_A_PRODUCT_ID":   "875307",
-  "YOUR_SECTION_B_PRODUCT_ID":   "875310",
-  "YOUR_FULL_PHASE_PRODUCT_ID":  "875312",
-  "YOUR_BUNDLE_PRODUCT_ID":      "bundle",
+ const PRODUCT_MAP = {
+  "875307": "p1a",
+  "875310": "p1b",
+  "875312": "p1full",
 };
 
 const ADMIN_CODE = "MFG-ADMIN-2025";
