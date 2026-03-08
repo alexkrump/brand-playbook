@@ -13,9 +13,9 @@ const PC = {
 
 // ─── LEMON SQUEEZY LINKS (replace with real product URLs) ─────────────────────
 const LS = {
-  p1a:    "https://marketingforgood.lemonsqueezy.com/checkout/buy/p1-section-a",
-  p1b:    "https://marketingforgood.lemonsqueezy.com/checkout/buy/p1-section-b",
-  p1full: "https://marketingforgood.lemonsqueezy.com/checkout/buy/p1-full",
+  p1a:    "https://alexkrump.lemonsqueezy.com/checkout/buy/1cdb8d8f-4826-4fec-a982-9a3fff79ca86",
+  p1b:    "https://alexkrump.lemonsqueezy.com/checkout/buy/4efee914-1184-47ac-b5c6-f99607cff881",
+  p1full: "https://alexkrump.lemonsqueezy.com/checkout/buy/89d72247-d1fa-417c-bd8d-0d01f68d17cb",
   bundle: "https://marketingforgood.lemonsqueezy.com/checkout/buy/full-bundle",
 };
 
