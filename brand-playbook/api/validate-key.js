@@ -6,9 +6,9 @@
 const PRODUCT_MAP = {
   // Map your LemonSqueezy product IDs to your internal unlock keys
   // Find Product ID: LemonSqueezy dashboard → click product → URL shows the ID
-  "YOUR_SECTION_A_PRODUCT_ID":   "p1a",
-  "YOUR_SECTION_B_PRODUCT_ID":   "p1b",
-  "YOUR_FULL_PHASE_PRODUCT_ID":  "p1full",
+  "YOUR_SECTION_A_PRODUCT_ID":   "875307",
+  "YOUR_SECTION_B_PRODUCT_ID":   "875310",
+  "YOUR_FULL_PHASE_PRODUCT_ID":  "875312",
   "YOUR_BUNDLE_PRODUCT_ID":      "bundle",
 };
 
