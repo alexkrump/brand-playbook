@@ -772,18 +772,15 @@ export default function BrandPlaybook() {
   // Persist with storage
   useEffect(() => {
     try {
-      if (window.storage) {
-        window.storage.get("brand-playbook-v5").then(r => {
-          if (r?.value) setSt({ checked:{}, links:{}, myLinks:{}, unlocked:{}, ...JSON.parse(r.value) });
-          setLoaded(true);
-        }).catch(() => setLoaded(true));
-      } else setLoaded(true);
-    } catch { setLoaded(true); }
+      const saved = localStorage.getItem("brand-playbook-v5");
+      if (saved) setSt({ checked:{}, links:{}, myLinks:{}, unlocked:{}, ...JSON.parse(saved) });
+    } catch {}
+    setLoaded(true);
   }, []);
 
   const save = useCallback((s) => {
     setSt(s);
-    try { if (window.storage) window.storage.set("brand-playbook-v5", JSON.stringify(s)); } catch {}
+    try { localStorage.setItem("brand-playbook-v5", JSON.stringify(s)); } catch {}
   }, []);
 
   const isUnlocked = (section, chapNumber) => {
